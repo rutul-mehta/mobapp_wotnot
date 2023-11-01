@@ -1,4 +1,4 @@
-import PropTypes from 'prop-types';
+// import PropTypes from 'prop-types';
 import React, {Component} from 'react';
 import {
   Animated,
@@ -173,22 +173,22 @@ class BottomSheet extends Component {
   }
 }
 
-BottomSheet.propTypes = {
-  animationType: PropTypes.oneOf(['none', 'slide', 'fade']),
-  height: PropTypes.number,
-  minClosingHeight: PropTypes.number,
-  openDuration: PropTypes.number,
-  closeDuration: PropTypes.number,
-  closeOnDragDown: PropTypes.bool,
-  closeOnPressMask: PropTypes.bool,
-  dragFromTopOnly: PropTypes.bool,
-  closeOnPressBack: PropTypes.bool,
-  keyboardAvoidingViewEnabled: PropTypes.bool,
-  customStyles: PropTypes.objectOf(PropTypes.object),
-  onClose: PropTypes.func,
-  onOpen: PropTypes.func,
-  children: PropTypes.node,
-};
+// BottomSheet.propTypes = {
+//   animationType: PropTypes.oneOf(['none', 'slide', 'fade']),
+//   height: PropTypes.number,
+//   minClosingHeight: PropTypes.number,
+//   openDuration: PropTypes.number,
+//   closeDuration: PropTypes.number,
+//   closeOnDragDown: PropTypes.bool,
+//   closeOnPressMask: PropTypes.bool,
+//   dragFromTopOnly: PropTypes.bool,
+//   closeOnPressBack: PropTypes.bool,
+//   keyboardAvoidingViewEnabled: PropTypes.bool,
+//   customStyles: PropTypes.objectOf(PropTypes.object),
+//   onClose: PropTypes.func,
+//   onOpen: PropTypes.func,
+//   children: PropTypes.node,
+// };
 
 BottomSheet.defaultProps = {
   animationType: 'none',
@@ -224,8 +224,8 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 0,
     overflow: 'hidden',
-    borderTopLeftRadius: theme.normalize(20),
-    borderTopRightRadius: theme.normalize(20),
+    borderTopLeftRadius: theme.sizes.radius.modalRadius,
+    borderTopRightRadius: theme.sizes.radius.modalRadius,
   },
   draggableContainer: {
     width: '100%',

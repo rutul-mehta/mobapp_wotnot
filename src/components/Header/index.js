@@ -38,7 +38,8 @@ const Header = ({
   onPressInfo,
   backgroundColor = theme.colors.brandColor.FAFAFA,
   rightIcon,
-  userItem
+  userItem,
+  isMoreIconHidden,
 }) => {
   return (
     <View style={[styles.container, {backgroundColor: backgroundColor}]}>
@@ -75,6 +76,7 @@ const Header = ({
               email={userItem?.subTittle}
               isOnline={userItem?.isOnline}
               uri={'https://i.pravatar.cc/512'}
+              hideStatus={userItem?.hideStatus}
             />
           ) : (
             <Image
@@ -85,12 +87,22 @@ const Header = ({
           )}
         </View>
       ) : null}
-      <View style={{flex: isRightIconHidden ? 1 : 1.5, paddingHorizontal: 5}}>
+      <View
+        style={{
+          flex: isRightIconHidden ? 1 : 1.5,
+          paddingHorizontal: 5,
+        }}>
         {!isRightIconHidden ? (
           rightIcon ? (
             rightIcon
           ) : (
-            <View style={{flexDirection: 'row'}}>
+            <View
+              style={[
+                {
+                  flexDirection: 'row',
+                },
+                isMoreIconHidden && {justifyContent: 'flex-end'},
+              ]}>
               <TouchableOpacity
                 activeOpacity={0.5}
                 onPress={onPressInfo}
@@ -101,17 +113,21 @@ const Header = ({
                   style={[styles.iconStyle, {tintColor: tintColor}]}
                 />
               </TouchableOpacity>
-              <Spacing direction="y" />
-              <TouchableOpacity
-                activeOpacity={0.5}
-                onPress={onPressMore}
-                disabled={isRightDisabled}>
-                <Image
-                  source={images.ic_more}
-                  resizeMode="contain"
-                  style={[styles.iconStyle, {tintColor: tintColor}]}
-                />
-              </TouchableOpacity>
+              {!isMoreIconHidden ? (
+                <>
+                  <Spacing direction="y" />
+                  <TouchableOpacity
+                    activeOpacity={0.5}
+                    onPress={onPressMore}
+                    disabled={isRightDisabled}>
+                    <Image
+                      source={images.ic_more}
+                      resizeMode="contain"
+                      style={[styles.iconStyle, {tintColor: tintColor}]}
+                    />
+                  </TouchableOpacity>
+                </>
+              ) : null}
             </View>
           )
         ) : null}

@@ -7,6 +7,7 @@ import {
   setTeammateData,
   saveReply,
   setUserPreference,
+  setUserList,
 } from './global';
 const defaultHeaders = {
   'Content-Type': 'application/json',
@@ -67,22 +68,50 @@ export const fetchTeammateData = (
 };
 
 export const fetchSavedReply = (
-  userID,
+  account_id,
   from,
   limit,
-  param,
+  isLoading,
+  query,
   {SuccessCallback, FailureCallback},
 ) => {
   return dispatch => {
-    dispatch(loadingSet());
+    isLoading ? dispatch(loadingSet()) : null;
     API.getInstance().Fetch(
-      endPoints.fetchSavedReply(userID, from, limit),
+      endPoints.fetchSavedReply(account_id, from, limit, query),
       defaultHeaders,
-      param,
+      '',
       {
         SuccessCallback: response => {
           dispatch(loadingUnset());
-          dispatch(saveReply(response));
+          // dispatch(saveReply(response));
+          SuccessCallback(response);
+        },
+        FailureCallback: response => {
+          dispatch(loadingUnset());
+          FailureCallback(response);
+        },
+      },
+    );
+  };
+};
+export const fetchSavedReplySearch = (
+  account_id,
+
+  isLoading,
+  query,
+  {SuccessCallback, FailureCallback},
+) => {
+  return dispatch => {
+    isLoading ? dispatch(loadingSet()) : null;
+    API.getInstance().Fetch(
+      endPoints.fetchSavedReplySearch(account_id, query),
+      defaultHeaders,
+      '',
+      {
+        SuccessCallback: response => {
+          dispatch(loadingUnset());
+          // dispatch(saveReply(response));
           SuccessCallback(response);
         },
         FailureCallback: response => {
@@ -108,5 +137,29 @@ export const changeAccount = (param, {SuccessCallback, FailureCallback}) => {
         FailureCallback(response);
       },
     });
+  };
+};
+
+export const fetchUserList = (
+  account_id,
+  {SuccessCallback, FailureCallback},
+) => {
+  return dispatch => {
+    API.getInstance().Fetch(
+      endPoints.fetchUserList(account_id),
+      defaultHeaders,
+      '',
+      {
+        SuccessCallback: response => {
+          dispatch(loadingUnset());
+          dispatch(setUserList(response));
+          SuccessCallback(response);
+        },
+        FailureCallback: response => {
+          dispatch(loadingUnset());
+          FailureCallback(response);
+        },
+      },
+    );
   };
 };

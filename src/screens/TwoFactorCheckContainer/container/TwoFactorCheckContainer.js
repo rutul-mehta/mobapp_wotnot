@@ -11,11 +11,16 @@ import {
   twoFactorCode,
   verifyTFAOTP,
   fetchUserPreference,
+  fetchAccounts,
 } from '../../../store/actions';
 import {handleFailureCallback} from '../../../util/apiHelper';
-import {strings} from '../../../locales/i18n';
+import {setLocale, strings} from '../../../locales/i18n';
 import {LOCAL_STORAGE} from '../../../constants/storage';
 import AsyncStorage from '@react-native-community/async-storage';
+import {
+  getItemFromStorage,
+  setItemToStorage,
+} from '../../../util/DeviceStorageOperations';
 
 class TwoFactorCheckContainer extends Component {
   constructor(props) {
@@ -45,14 +50,14 @@ class TwoFactorCheckContainer extends Component {
     const {verifyCode} = this.state;
     if (verifyCode === '' || verifyCode === null) {
       this.setState({
-        errOTP: strings('error.errEmpty'),
+        errOTP: strings('error.2FA_SETUP_SCREEN_SETUP_CODE_INPUT_ERROR'),
       });
       return;
     }
 
     if (verifyCode && verifyCode.length < 6) {
       this.setState({
-        errOTP: strings('error.errTwoFACode'),
+        errOTP: strings('error.2FA_SETUP_SCREEN_SETUP_CODE_INPUT_LENGTH_ERROR'),
       });
       return;
     }
@@ -84,11 +89,38 @@ class TwoFactorCheckContainer extends Component {
           JSON.stringify(res),
         );
         AsyncStorage.setItem(LOCAL_STORAGE.IS_LOGIN, 'true');
-        navigateAndSimpleReset('MainNavigator');
+        setLocale(res?.language?.code)
+
+        this.cllFetchAccounts()
+          .then(data => {
+            navigateAndSimpleReset('MainNavigator');
+          })
+          .catch(() => {
+          });
       },
       FailureCallback: res => {
         handleFailureCallback(res);
       },
+    });
+  };
+
+  cllFetchAccounts = () => {
+    return new Promise((resolve, reject) => {
+      this.props.fetchAccounts({
+        SuccessCallback: async res => {
+          await setItemToStorage(
+            LOCAL_STORAGE?.AGENT_ACCOUNT_LIST,
+            res?.account_info,
+          );
+          resolve(
+            getItemFromStorage(LOCAL_STORAGE?.AGENT_ACCOUNT_LIST) ?? undefined,
+          );
+        },
+        FailureCallback: res => {
+          handleFailureCallback(res, false, false, false);
+          reject(res);
+        },
+      });
     });
   };
 
@@ -103,10 +135,12 @@ class TwoFactorCheckContainer extends Component {
           state={state}
           onSubmit={this.onVerifyCodePress}
           recoveryCodeBtnPress={this.recoveryCodeBtnPress}
-          tittle={strings('login.enter_2fa_code')}
-          tittle2={strings('login.enter_2fa_code_note')}
-          inputLabel={strings('login.2fa_code')}
-          btnLabel={strings('button.verify_code')}
+          tittle={strings('login.2FA_TOTP_SCREEN_HEADING')}
+          tittle2={strings('login.2FA_TOTP_SCREEN_SUB_HEADING', {
+            ORGANISATION_NAME: 'WotNot',
+          })}
+          inputLabel={strings('login.2FA_TOTP_SCREEN_CODE_INPUT')}
+          btnLabel={strings('button.RECOVERY_SCREEN_VERIFY_BTN_TEXT')}
           showRecoveryLabel={true}
           isLoading={this.props.isLoading}
         />
@@ -115,7 +149,12 @@ class TwoFactorCheckContainer extends Component {
   }
 }
 
-const mapActionCreators = {twoFactorCode, verifyTFAOTP, fetchUserPreference};
+const mapActionCreators = {
+  twoFactorCode,
+  verifyTFAOTP,
+  fetchUserPreference,
+  fetchAccounts,
+};
 const mapStateToProps = state => {
   return {
     isLoading: state.global.loading,

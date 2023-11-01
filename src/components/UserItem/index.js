@@ -1,16 +1,32 @@
 import React from 'react';
 import {Image, Pressable, StyleSheet, View} from 'react-native';
-import {hp, wp} from '../../util/helper';
+import {SvgCssUri} from 'react-native-svg';
+import images from '../../assets/images';
+import {VALIDATION_REGEX, hp, wp} from '../../util/helper';
 import theme from '../../util/theme';
 import Spacing from '../Spacing';
 import Text from '../Text/index';
 
-const UserItem = ({name, email, uri, subTittle, isOnline, isAvatar}) => (
+const UserItem = ({name, email, uri, subTittle, isOnline, isAvatar,hideStatus}) => (
   <Pressable style={{padding: 5}}>
     <View style={styles.container}>
       <View>
         {isAvatar ? (
-          <Image source={{uri: uri}} style={styles.image} />
+          uri?.toLowerCase()?.includes('svg') ? (
+            <SvgCssUri
+              style={[styles.image, {backgroundColor: 'transparent'}]}
+              uri={uri}
+            />
+          ) : (
+            <Image
+              source={
+                !VALIDATION_REGEX?.isImageType.test(uri)
+                  ? images.ic_userprofile
+                  : {uri: uri}
+              }
+              style={styles.image}
+            />
+          )
         ) : (
           <View
             style={[
@@ -24,16 +40,18 @@ const UserItem = ({name, email, uri, subTittle, isOnline, isAvatar}) => (
             <Text>{name?.slice(0, 2)?.toUpperCase()}</Text>
           </View>
         )}
-        <View
-          style={[
-            styles.badgeContainer,
-            {
-              backgroundColor: isOnline
-                ? theme.colors.brandColor.green
-                : theme.colors.brandColor.silver,
-            },
-          ]}
-        />
+        {!hideStatus ? (
+          <View
+            style={[
+              styles.badgeContainer,
+              {
+                backgroundColor: isOnline
+                  ? theme.colors.brandColor.green
+                  : theme.colors.brandColor.silver,
+              },
+            ]}
+          />
+        ) : null}
       </View>
       <Spacing direction="y" size="xs" />
       <View style={styles.rightContainer}>

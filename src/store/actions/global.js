@@ -92,3 +92,24 @@ export const setClosedConversationCount = data => ({
 export const loadingSetConversations = () => ({type: types.API_LOADING_START});
 
 export const loadingUnsetConversations = () => ({type: types.API_LOADING_STOP});
+
+
+export const setConversationsHistory = data => ({
+  type: types.CONVERSATION_HISTORY,
+  payload: data,
+});
+
+export const setNotificationData = data => ({
+  type: types.NOTIFICATION_DATA,
+  payload: data,
+});
+
+export const setUserList = data => ({
+  type: types.USER_LIST,
+  payload: data,
+});
+
+export const setUserSetting = data => ({
+  type: types.USER_SETTINGS,
+  payload: data,
+});

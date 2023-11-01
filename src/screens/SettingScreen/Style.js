@@ -24,14 +24,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
     height: theme.sizes.icons.xl9,
     flex: 1,
-    padding: theme.sizes.spacing.xs10,
+    paddingHorizontal: theme.sizes.spacing.xs10,
     flexDirection: 'row',
     alignItems: 'center',
   },
   bottomSheetStyle: {
     elevation: 100,
-    borderTopLeftRadius: theme.normalize(2),
-    borderTopRightRadius: theme.normalize(2),
+    // borderTopLeftRadius: theme.sizes.radius.modalRadius,
+    // borderTopRightRadius: theme.sizes.radius.modalRadius,
   },
 });
 

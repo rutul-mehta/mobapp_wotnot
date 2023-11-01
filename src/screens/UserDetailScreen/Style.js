@@ -7,9 +7,10 @@ const styles = StyleSheet.create({
     padding: theme.sizes.spacing.ph,
   },
   labelStyle: {
-    flex: 0.4,
+    flex: 0.45,
     flexDirection: 'row',
     alignItems: 'center',
+    marginEnd:10
   },
   iconStyle: {
     height: theme.sizes.image.sm,
@@ -19,6 +20,7 @@ const styles = StyleSheet.create({
     flex: 0.5,
     // alignItems: 'center',
     alignContent: 'center',
+    marginStart:10
   },
   btnStyle: {
     backgroundColor: theme.colors.brandColor.blue,
@@ -31,11 +33,32 @@ const styles = StyleSheet.create({
   labelContainer: {
     borderWidth: 1,
     borderColor: theme.colors.borderColor,
-    padding: theme.sizes.spacing.xs10,
+    // padding: theme.sizes.spacing.xs10,
     borderRadius: 5,
+    // flexDirection: 'row',
+    // flexWrap: 'wrap',
+    // alignItems: 'center',
+    height:theme.normalize(95)
+  },
+  assigneeHeader: {
+    backgroundColor: theme.colors.brandColor.FAFAFA,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+    elevation: 2,
+    height: theme.sizes.spacing.xl3,
+    paddingHorizontal: theme.sizes.spacing.ph,
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
+  },
+  assigneeIcon: {
+    height: theme.sizes.image.md,
+    width: theme.sizes.image.md,
+    tintColor: 'black',
   },
 });
 

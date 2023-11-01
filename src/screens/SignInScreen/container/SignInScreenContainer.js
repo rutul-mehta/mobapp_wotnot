@@ -1,18 +1,29 @@
 import React, {Component} from 'react';
 import {connect} from 'react-redux';
+import {API, Headers} from '../../../apiService';
+import {LOCAL_STORAGE} from '../../../constants/storage';
+import {setLocale, strings} from '../../../locales/i18n';
 import {
   navigate,
   navigateAndSimpleReset,
 } from '../../../navigator/NavigationUtils';
-import {userLogin, fetchUserPreference} from '../../../store/actions';
-import SignInScreenComponent from '../component/SignInScreenComponent';
-import {VALIDATION_REGEX} from '../../../util/helper';
-import {strings} from '../../../locales/i18n';
+import {
+  fetchAccounts,
+  fetchUserPreference,
+  userLogin,
+} from '../../../store/actions';
+import {
+  getItemFromStorage,
+  setItemToStorage,
+} from '../../../util/DeviceStorageOperations';
 import {handleFailureCallback} from '../../../util/apiHelper';
-import {API, Headers} from '../../../apiService';
-import AsyncStorage from '@react-native-community/async-storage';
-import {LOCAL_STORAGE} from '../../../constants/storage';
-import DeviceWebSocketManager from '../../../apiService/WebSocketManager';
+import {VALIDATION_REGEX} from '../../../util/helper';
+import SignInScreenComponent from '../component/SignInScreenComponent';
+import {
+  GoogleSignin,
+  GoogleSigninButton,
+  statusCodes,
+} from '@react-native-google-signin/google-signin';
 
 class SignInScreenContainer extends Component {
   constructor(props) {
@@ -25,6 +36,7 @@ class SignInScreenContainer extends Component {
       isPwdVisible: false,
       emailErrMsg: '',
       pwdErrMsg: '',
+      isLoading: false,
     };
     this.emailInputRef = React.createRef();
     this.passWordInputRef = React.createRef();
@@ -33,7 +45,13 @@ class SignInScreenContainer extends Component {
   }
 
   componentDidMount() {
-    DeviceWebSocketManager.getInstance().connect();
+    GoogleSignin.configure({
+      webClientId:
+        '386340205536-97h70dpce42jbg0hofb8f13ho6gsfdo3.apps.googleusercontent.com',
+
+      offlineAccess: true,
+      forceCodeForRefreshToken: true,
+    });
   }
 
   onEmailChange = text => {
@@ -50,25 +68,31 @@ class SignInScreenContainer extends Component {
   };
 
   onSubmit = () => {
-    let state = this.state;
+    API.getInstance().setHeaders([
+      {
+        key: 'app_version',
+        value: '1.0.1',
+      },
+    ]);
 
+    let state = this.state;
     if (this.isValidEmail() && this.isValidPassword()) {
       this.setState({
-        emailErrMsg: strings('error.errEmail'),
-        pwdErrMsg: strings('error.errPwd'),
+        emailErrMsg: strings('error.EMAIL_VALIDATION_MESSAGE'),
+        pwdErrMsg: strings('error.PASSWORD_VALIDATION_MESSAGE'),
       });
       return;
     }
     if (this.isValidEmail()) {
       this.setState({
-        emailErrMsg: strings('error.errEmail'),
+        emailErrMsg: strings('error.EMAIL_VALIDATION_MESSAGE'),
       });
       return;
     }
 
     if (this.isValidPassword()) {
       this.setState({
-        pwdErrMsg: strings('error.errPwd'),
+        pwdErrMsg: strings('error.PASSWORD_VALIDATION_MESSAGE'),
       });
       return;
     }
@@ -76,28 +100,32 @@ class SignInScreenContainer extends Component {
       email: state.email?.toLocaleLowerCase(),
       password: state.password,
     };
+    this.setLoading(true);
     this.props.userLogin(param, {
       SuccessCallback: res => {
         if (res?.ok && res?.two_factor_auth === undefined) {
-          AsyncStorage.setItem(LOCAL_STORAGE.IS_LOGIN, JSON.stringify(true));
+          setItemToStorage(LOCAL_STORAGE?.IS_LOGIN, 'true');
           this.callFetchUserPreference();
           return;
         }
-        AsyncStorage.setItem(LOCAL_STORAGE.AUTH_TOKEN, res?.access_token);
+        setItemToStorage(LOCAL_STORAGE?.AUTH_TOKEN, res?.access_token);
         API.getInstance().setHeader(
           Headers.AUTHORIZATION,
           `Bearer ${res?.access_token}`,
         );
         if (res?.two_factor_auth === 'QR_CODE') {
+          this.setLoading(false);
           return navigate('TwoFactorAuthScreen');
         } else if (res?.two_factor_auth === 'TOTP_VERIFY') {
+          this.setLoading(false);
           return navigate('TwoFactorCheckScreen');
         } else {
-          AsyncStorage.setItem(LOCAL_STORAGE.IS_LOGIN, JSON.stringify(true));
+          setItemToStorage(LOCAL_STORAGE?.IS_LOGIN, 'true');
           this.callFetchUserPreference();
         }
       },
       FailureCallback: res => {
+        this.setLoading(false);
         handleFailureCallback(res, true, true);
       },
     });
@@ -124,21 +152,75 @@ class SignInScreenContainer extends Component {
     // navigate('TwoFactorAuthScreen')
   };
 
-  _googleSignIn = () => {};
-
-  callFetchUserPreference = () => {
-    this.props.fetchUserPreference(null, {
-      SuccessCallback: res => {
-        AsyncStorage.setItem(
-          LOCAL_STORAGE?.USER_PREFERENCE,
-          JSON.stringify(res),
+  _googleSignIn = async () => {
+    try {
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      console.log(userInfo);
+    } catch (error) {
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        console.log('User cancelled the login flow');
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        console.log('Signing in');
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        console.log('Play services not available');
+      } else {
+        console.log(
+          'Some other error happened',
+          error.message + ' ' + error.code,
         );
-        navigateAndSimpleReset('MainNavigator');
+      }
+    }
+  };
+
+  callFetchUserPreference = async () => {
+    this.props.fetchUserPreference(null, {
+      SuccessCallback: async res => {
+        setItemToStorage(LOCAL_STORAGE?.USER_PREFERENCE, res);
+        setLocale(res?.language?.code);
+        this.cllFetchAccounts()
+          .then(data => {
+            this.setLoading(false);
+            if (data) {
+              navigateAndSimpleReset('MainNavigator');
+            } else {
+              console.log('Something went wrong');
+            }
+          })
+          .catch(() => {
+            console.log('Something went wrong');
+          });
       },
       FailureCallback: res => {
+        this.setLoading(false);
         handleFailureCallback(res);
       },
     });
+  };
+
+  cllFetchAccounts = () => {
+    return new Promise((resolve, reject) => {
+      this.props.fetchAccounts({
+        SuccessCallback: async res => {
+          await setItemToStorage(
+            LOCAL_STORAGE?.AGENT_ACCOUNT_LIST,
+            res?.account_info,
+          );
+          resolve(
+            getItemFromStorage(LOCAL_STORAGE?.AGENT_ACCOUNT_LIST) ?? undefined,
+          );
+        },
+        FailureCallback: res => {
+          this.setLoading(false);
+          handleFailureCallback(res, false, false, false);
+          reject(res);
+        },
+      });
+    });
+  };
+
+  setLoading = value => {
+    this.setState({isLoading: value});
   };
 
   render() {
@@ -159,7 +241,7 @@ class SignInScreenContainer extends Component {
           rightIconClick={this.rightIconClick}
           onSubmit={this.onSubmit}
           scrollViewRef={this.scrollViewRef}
-          isLoading={this.props.isLoading}
+          isLoading={this.state.isLoading}
           onForgotPwdClick={this.onForgotPwdClick}
           _googleSignIn={this._googleSignIn}
         />
@@ -171,6 +253,7 @@ class SignInScreenContainer extends Component {
 const mapActionCreators = {
   userLogin,
   fetchUserPreference,
+  fetchAccounts,
 };
 const mapStateToProps = state => {
   return {

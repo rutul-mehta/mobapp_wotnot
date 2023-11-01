@@ -15,6 +15,7 @@ import {getAssigneeId, getDayDifference} from '../../../util/helper';
 import {navigate} from '../../../navigator/NavigationUtils';
 import theme from '../../../util/theme';
 import {Text} from '../../../components';
+import { strings } from '../../../locales/i18n';
 
 class ConversationListTab extends Component {
   constructor(props) {
@@ -113,8 +114,6 @@ class ConversationListTab extends Component {
     if (prevState?.currentTab != this.props.currentTab) {
       this.onRefresh();
     }
-    // console.log('-------------->', JSON.stringify(prevState?.currentTab));
-    // console.log('-------------->', JSON.stringify(this.props.currentTab));
   }
 
   loadMoreData = () => {
@@ -201,7 +200,7 @@ class ConversationListTab extends Component {
                   alignItems: 'center',
                 }}>
                 <Text color={theme.colors.brandColor.silver}>
-                  No conversation found
+                {strings('No conversation found')}
                 </Text>
               </View>
             }

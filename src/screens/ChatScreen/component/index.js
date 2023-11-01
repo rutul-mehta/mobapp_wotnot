@@ -7,6 +7,7 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
+  SafeAreaView,
 } from 'react-native';
 import {
   FlexContainer,
@@ -26,8 +27,21 @@ import ConversationListTab from '../container/ConversationListTab';
 import {useSelector} from 'react-redux';
 import styles from '../Style';
 import {CONVERSATION} from '../../../constants/global';
-import {getDayDifference} from '../../../util/helper';
-import {isValidJSON} from '../../../util/JSONOperations';
+import {getDayDifference, getMiniFromTime, showSLA} from '../../../util/helper';
+// import {isValidJSON,getMessage} from '../../../util/JSONOperations';
+import {
+  getMessage,
+  messageParser,
+  convertTextMessage,
+  unEscape,
+  getGlobalChannelIcon,
+  getAssigneeName,
+  getAddress,
+} from '../../../util/ConversationListHelper';
+import {Box} from 'native-base';
+import {registerVisitorTypingHandler} from '../../../websocket';
+import {contains} from 'react-native-redash';
+import {strings} from '../../../locales/i18n';
 
 const renderTabView = (label, onPress, isSelected, isDisable) => {
   return (
@@ -63,15 +77,188 @@ const ChatScreenComponent = ({
   onConversationClick = () => {},
   onRefresh = () => {},
   isRefreshing,
+  moreLoading,
+  loadMoreData = () => {},
+  onEndReach,
+  isTyping,
+  isSLAEnable,
+  slaTime,
+  users,
 }) => {
   const [index, setIndex] = React.useState(0);
+  const [typingData, setTypingData] = React.useState();
+  const [percentage, setPercentage] = React.useState();
+  const [showErr, setErr] = React.useState(false);
   const conversation_summary = useSelector(
     state => state.conversationReducer?.conversation_summary?.open_status,
   );
   const close_conversation_count = useSelector(
     state => state.conversationReducer?.closeConversationsCount,
   );
-  const tabLabels = ['You', 'Assigned', 'Unassigned', 'Closed'];
+  const tabLabels = [
+    strings('tab.You'),
+    strings('tab.Assigned'),
+    strings('tab.Unassigned'),
+    strings('tab.Closed'),
+  ];
+  let tickerInterval = null;
+
+  const animationRef = React.createRef();
+  React.useEffect(() => {
+    registerVisitorTypingHandler(e => {
+      setTypingData(e);
+    });
+  });
+
+  const getSalTime = (itemData, currentTab, slaTime, isSLAEnable) => {
+    // console.log('------', showSLA(itemData?.sla_start_at, slaTime));
+    if (
+      currentTab === CONVERSATION.CLOSE ||
+      !isSLAEnable ||
+      itemData?.sla_start_at === null
+    ) {
+      return true;
+    }
+    return !showSLA(itemData?.sla_start_at, slaTime);
+  };
+
+  const showSlaEnd = (itemData, currentTab, slaTime, isSLAEnable) => {
+    if (
+      currentTab === CONVERSATION.CLOSE ||
+      !isSLAEnable ||
+      itemData?.sla_start_at === null
+    ) {
+      return true;
+    }
+    // console.log(
+    //   'showSLA(itemData?.sla_start_at, slaTime)',
+    //   showSLA(itemData?.sla_start_at, slaTime),
+    // );
+    return showSLA(itemData?.sla_start_at, slaTime);
+  };
+
+  const getPrefillValue = (itemData, slaTime) => {
+    let currentMin = getMiniFromTime(itemData?.sla_start_at);
+    let percentage = (100 * currentMin) / slaTime;
+    setPercentage(percentage);
+    // console.log('percentage', percentage);
+    return percentage;
+  };
+
+  React.useEffect(() => {
+    animationRef?.current?.animate(percentage);
+  }, percentage);
+
+  const getFullMessage = item => {
+    let name = '';
+    if (item?.last_message_by === 0) {
+      name = '';
+    } else if (
+      item?.conversation_mode === 'BOT' &&
+      item?.closed_by?.first_name !== 'System'
+    ) {
+      name = '<b>Bot: </b>';
+    } else {
+      name = getAssigneeName(users, item?.last_message_by);
+    }
+    return item?.message === ''
+      ? unEscape(item?.note)
+      : ` ${name}${getMessage(item)}`;
+  };
+
+  const getListItemCustomization = item => {
+    const date = item?.sla_start_at ? new Date(item?.sla_start_at) : new Date();
+    let lastMessageAt = '';
+    const checkLastMessageBy =
+      !item?.last_message_by || checkForUser(item?.last_message_by);
+
+    if (
+      item.status_id !== 2 &&
+      (!item?.assignee || (item?.assignee && item?.assignee?.type_id !== 2)) &&
+      checkLastMessageBy
+    ) {
+      lastMessageAt = date;
+      // console.log('---------<------->', lastMessageAt);
+    }
+    // console.log('checkLastMessageBy', lastMessageAt + '');
+    let fullMEssage = getFullMessage(item);
+
+    return {
+      ...item,
+      lastMessageAt,
+      fullMEssage,
+    };
+  };
+
+  const checkForUser = id => {
+    let value = '';
+    users?.forEach(element => {
+      value = element?.id === id ? element?.user_type?.id === 2 : false;
+    });
+    return value;
+  };
+
+  const renderList = ({item}) => {
+    const customization = getListItemCustomization(item);
+    // console.log('customization', customization);
+    return (
+      <ChatItem
+        key={item?.assignee?.id}
+        name={item?.title}
+        // email={`${item?.assignee?.name ? item?.assignee?.name + ' | ' : ''}${
+        //   item?.city_name
+        // },${item?.country_name}`}
+        email={getAddress(item)}
+        uri={item?.assignee?.image_url}
+        isOnline={item?.visitor_status === CONVERSATION.USER_STATUS.ONLINE}
+        unreadCount={item?.unread_messages_count}
+        lastMessageDay={getDayDifference(item?.last_message_at)}
+        // subTittle={`${item?.message} `}
+        subTittle={getFullMessage(item)}
+        onPress={() => onConversationClick(item)}
+        item={item}
+        isClosedMode={item?.status_id === 2}
+        rating={item?.rating}
+        hideRating={
+          currentTab !== CONVERSATION.CLOSE ||
+          item?.global_channel_name !== 'Web' ||
+          item?.rating === 0
+        }
+        hideUnreadCount={
+          currentTab === CONVERSATION.CLOSE || item?.unread_messages_count == 0
+        }
+        hideAnimation={
+          percentage >= 100 ||
+          customization?.lastMessageAt == '' ||
+          getSalTime(item, currentTab, slaTime, isSLAEnable)
+        }
+        hideStatusIcon={
+          currentTab === CONVERSATION.CLOSE ||
+          item?.global_channel_name?.toLowerCase() !== 'web'
+        }
+        paddingHorizontal={theme.sizes.spacing.ph}
+        backgroundColor={'white'}
+        duration={slaTime * 60000}
+        itemData={item}
+        borderBottomWidth={1}
+        isLoading={isLoading}
+        typingData={typingData}
+        channelIcon={getGlobalChannelIcon(
+          item?.global_channel_name,
+          item?.browser,
+        )}
+        hideSlaErr={
+          !(percentage >= 100) ||
+          showSlaEnd(item, currentTab, slaTime, isSLAEnable) ||
+          customization?.lastMessageAt === ''
+        }
+        prefill={getPrefillValue(item, slaTime)}
+        animation={animationRef}
+        onAnimationComplete={() => setErr(true)}
+      />
+    );
+  };
+
   return (
     <FlexContainer statusBarColor={theme.colors.brandColor.FAFAFA}>
       <Header
@@ -124,7 +311,7 @@ const ChatScreenComponent = ({
           )}
         </ScrollView>
       </View>
-      <View style={{flex: 1, backgroundColor: 'white'}}>
+      <SafeAreaView flex={1}>
         {isLoading ? (
           <ActivityIndicator
             size="large"
@@ -134,34 +321,12 @@ const ChatScreenComponent = ({
         ) : (
           <FlatList
             data={conversations}
-            renderItem={({item, index}) => (
-              <ChatItem
-                key={item?.assignee?.id}
-                name={item?.title + ' ' + index ?? ''}
-                email={`${
-                  item?.assignee?.name ? item?.assignee?.name + ' | ' : ''
-                }${item?.city_name},${item?.country_name}`}
-                uri={item?.assignee?.image_url}
-                isOnline={
-                  item?.visitor_status === CONVERSATION.USER_STATUS.ONLINE
-                }
-                unreadCount={item?.unread_messages_count}
-                lastMessageDay={getDayDifference(item?.last_message_at)}
-                // subTittle={`${item?.message} `}
-                subTittle={`${
-                  item?.assignee ? item?.assignee?.name + ': ' : null
-                } ${getMessage(item)}`}
-                onPress={() => onConversationClick(item)}
-                item={item}
-                isClosedMode={item?.status_id === 2}
-                rating={item?.rating}
-                hideRating={currentTab !== CONVERSATION.CLOSE}
-              />
-            )}
+            renderItem={renderList}
             keyExtractor={(_it, index) => `${_it?.thread_key} ${index}`}
             contentContainerStyle={{
               flexGrow: 1,
-              padding: theme.sizes.spacing.ph,
+              // paddingVertical: 5,
+              // padding: theme.sizes.spacing.ph,
             }}
             ListEmptyComponent={
               <View
@@ -171,7 +336,7 @@ const ChatScreenComponent = ({
                   alignItems: 'center',
                 }}>
                 <Text color={theme.colors.brandColor.silver}>
-                  No conversation found
+                  {strings('No conversation found')}
                 </Text>
               </View>
             }
@@ -182,140 +347,33 @@ const ChatScreenComponent = ({
                 colors={[theme.colors.brandColor.blue]}
               />
             }
+            onEndReached={({distanceFromEnd}) => onEndReach(distanceFromEnd)}
+            // onEndReachedThreshold={0.5}
+            ListFooterComponent={renderFooter(moreLoading)}
+            maxToRenderPerBatch={16}
+            scrollEventThrottle={16}
+            onEndReachedThreshold={0.9}
           />
         )}
-      </View>
-      {/* <Tab
-        value={currentTab}
-        onChange={onSelectTab}
-        indicatorStyle={{
-          height: theme.normalize(2),
-          backgroundColor: theme.colors.brandColor.blue,
-        }}
-        dense
-        style={{
-          backgroundColor: theme.colors.brandColor.FAFAFA,
-        }}>
-        <Tab.Item
-          titleStyle={[
-            textStyle?.body2,
-            currentTab == 0 && {color: theme.colors.brandColor.blue},
-          ]}>
-          {`You\n(${conversation_summary?.you})`}
-        </Tab.Item>
-        <Tab.Item
-          titleStyle={[
-            textStyle?.body2,
-            currentTab == 1 && {color: theme.colors.brandColor.blue},
-          ]}>
-          {`Assigned\n(${conversation_summary?.assigned})`}
-        </Tab.Item>
-        <Tab.Item
-          titleStyle={[
-            textStyle?.body2,
-            currentTab == 2 && {color: theme.colors.brandColor.blue},
-          ]}>
-          {`Unassigned\n(${conversation_summary?.unassigned})`}
-        </Tab.Item>
-        <Tab.Item
-          titleStyle={[
-            textStyle?.body2,
-            {textAlign: 'center'},
-            currentTab == 3 && {color: theme.colors.brandColor.blue},
-          ]}>
-          {`Closed\n(${close_conversation_count})`}
-        </Tab.Item>
-      </Tab>
-      <TabView value={currentTab} onChange={onSelectTab} animationType="spring">
-        <TabView.Item style={{backgroundColor: 'white', width: '100%'}}>
-          <ConversationListTab
-            statusId={1}
-            isYou={true}
-            isAssignee={false}
-            isUnAssignee={false}
-            navigation={navigation}
-            currentTab={currentTab}
-            onSelectTab={onSelectTab}
-          />
-        </TabView.Item>
-        <TabView.Item style={{backgroundColor: 'white', width: '100%'}}>
-          <ConversationListTab
-            statusId={1}
-            isYou={false}
-            isAssignee={true}
-            isUnAssignee={false}
-            navigation={navigation}
-            currentTab={currentTab}
-            onSelectTab={onSelectTab}
-          />
-        </TabView.Item>
-        <TabView.Item style={{backgroundColor: 'white', width: '100%'}}>
-          <ConversationListTab
-            statusId={1}
-            isAssignee={false}
-            isYou={false}
-            isUnAssignee={true}
-            navigation={navigation}
-            currentTab={currentTab}
-            onSelectTab={onSelectTab}
-          />
-        </TabView.Item>
-        <TabView.Item style={{backgroundColor: 'white', width: '100%'}}>
-          <ConversationListTab
-            statusId={2}
-            isYou={false}
-            isAssignee={false}
-            isUnAssignee={false}
-            navigation={navigation}
-            currentTab={currentTab}
-            onSelectTab={onSelectTab}
-          />
-        </TabView.Item>
-      </TabView> */}
+      </SafeAreaView>
     </FlexContainer>
   );
 };
 
-const getMessage = item => {
-  let message = null;
-  let data = isValidJSON(item.message) ? JSON.parse(item.message) : null;
-  if (
-    data &&
-    data.version &&
-    data.version === 2 &&
-    data.type === 'send_message'
-  ) {
-    let messageItem = isValidJSON(data.text) ? JSON.parse(data.text) : null;
-    if (messageItem) {
-      if (messageItem.type === 'text') {
-        message = messageItem.text;
-      } else {
-        let fileItem = messageItem.video
-          ? messageItem.video
-          : messageItem.document
-          ? messageItem.document
-          : messageItem.audio
-          ? messageItem.audio
-          : messageItem.image
-          ? messageItem.image
-          : null;
-
-        if (fileItem) {
-          message = `${fileItem.file_name}`;
-        } else {
-          message = 'File';
-        }
-      }
-    }
-  } else if (data.type === 'text') {
-    message = data.text;
-  } else {
-    message = item.message;
-  }
-
-  return item.newNote
-    ? item.newNote?.replace(/<\/?[^>]+(>|$)/g, '')
-    : message?.replace(/<\/?[^>]+(>|$)/g, '');
+const renderFooter = moreLoading => {
+  return moreLoading ? (
+    <View
+      style={{
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: 50,
+      }}>
+      <ActivityIndicator color={theme.colors.brandColor.blue} />
+    </View>
+  ) : (
+    <></>
+  );
 };
 
 export default ChatScreenComponent;

@@ -14,19 +14,36 @@ import {
   fetchAccounts,
   fetchUserPreference,
   changeAccount,
+  clearAllData,
+  setProfileEvents,
+  changeUserSetting,
 } from '../../../store/actions';
 import {handleFailureCallback} from '../../../util/apiHelper';
+import {
+  changeUserStatus,
+  disconnect,
+  reconnect,
+  registerUserStatus,
+} from '../../../websocket';
+import {getAgentPayload} from '../../../common/common';
+import {setLocale} from '../../../locales/i18n';
 
 class SettingScreenContainer extends Component {
   constructor(props) {
     super(props);
     this.state = {
       userProfile: {},
-      isActive: false,
+      isActive: true,
       accountStatus: accountList?.[0]?.label,
       selectedLanguage: 'English',
       isOpen: false,
       isLoading: false,
+      showAccountModal: false,
+      search_text: '',
+      filterAccountData: [],
+      showLanguageModal: false,
+      filerLanguageData: [],
+      searchLanguageValue: '',
     };
     this.onLogoutClick = this.onLogoutClick.bind(this);
     this.onNotificationClick = this.onNotificationClick.bind(this);
@@ -36,30 +53,59 @@ class SettingScreenContainer extends Component {
     this.logoutRef = React.createRef();
   }
 
-  componentDidMount() {
+  async componentDidMount() {
+    const {userPreference} = this.props;
     this.props.navigation.addListener('focus', () => {
       this.cllFetchAccounts();
-      this.callFetchUserPreference();
+      // this.callFetchUserPreference();
+      registerUserStatus(this.getUserStatus);
+      this.setSelectedLanguage(userPreference);
     });
-    // this.cllFetchAccounts();
-    // this.callFetchUserPreference();
   }
+  setSelectedLanguage = data => {
+    this.setState({
+      selectedLanguage: data?.language?.label,
+    });
+  };
+
+  getUserStatus = status => {
+    // console.log('------->', status);
+    this.setState(
+      {
+        isActive: status?.user_status === 'online' ? true : false,
+      },
+      () => {
+        // this.callFetchUserPreference(false);
+      },
+    );
+    console.log(
+      'status>>>>>>',
+      status?.user_status === 'online' ? true : false,
+    );
+  };
 
   onLogoutClick = async () => {
     this.setState({isOpen: true});
   };
 
-  onNotificationClick = () => {};
+  onNotificationClick = () => {
+    navigate('NotificationScreen');
+  };
 
   onSwitchToggle = () => {
-    this.setState({isActive: !this.state.isActive});
+    this.setState({isActive: !this.state.isActive}, () => {
+      this.callSetProfileEvents(this.state.isActive);
+    });
   };
 
   onPressAccountDropdown = () => {
+    this.setState({showAccountModal: true});
     this.accountModalRef?.current?.open();
   };
 
   onAccountListPress = (item, index) => {
+    this.setState({showAccountModal: false});
+    this.accountModalRef?.current?.close();
     this.setLoader(true);
     this.callChangeAccount(item?.key);
     // this.setState(
@@ -73,17 +119,19 @@ class SettingScreenContainer extends Component {
   };
 
   onPressLanguageDropdown = () => {
-    this.languageModalRef?.current?.open();
+    this.setState({showLanguageModal: true});
   };
 
   onLanguageSelected = (item, index) => {
-    //code
     this.setState(
       {
         selectedLanguage: item?.languageName,
       },
-      () => {
+      async () => {
+        this.setState({showLanguageModal: false});
         this.languageModalRef?.current?.close();
+        setLocale(item?.code);
+        this.callSetUserSetting(item);
       },
     );
   };
@@ -101,19 +149,15 @@ class SettingScreenContainer extends Component {
         Object.keys(LOCAL_STORAGE).map(key =>
           removeItemFromStorage(LOCAL_STORAGE[key]),
         );
-        // await AsyncStorage.setItem(LOCAL_STORAGE.IS_LOGIN, 'false');
-        // await AsyncStorage.setItem(
-        //   LOCAL_STORAGE.USER_PREFERENCE,
-        //   JSON.stringify({}),
-        // );
+        disconnect();
         navigateAndSimpleReset('SignInScreen');
       },
       FailureCallback: res => {
+        disconnect();
         Object.keys(LOCAL_STORAGE).map(key =>
           removeItemFromStorage(LOCAL_STORAGE[key]),
         );
         navigateAndSimpleReset('SignInScreen');
-        console.log('1111111111111', JSON.stringify(res));
       },
     });
   };
@@ -127,13 +171,18 @@ class SettingScreenContainer extends Component {
     });
   };
 
-  callFetchUserPreference = () => {
+  callFetchUserPreference = (isReset = false) => {
     this.props.fetchUserPreference(null, {
       SuccessCallback: res => {
+        this.setState({
+          isActive: res?.status_id === 1,
+        });
         AsyncStorage.setItem(
           LOCAL_STORAGE?.USER_PREFERENCE,
           JSON.stringify(res),
         );
+        setLocale(res?.language?.code);
+        isReset ? this.changeProfile() : null;
       },
       FailureCallback: res => {
         handleFailureCallback(res, true, true);
@@ -142,12 +191,13 @@ class SettingScreenContainer extends Component {
   };
 
   callChangeAccount = account_key => {
+    this.setLoader(true);
     let param = {
       account_key: account_key,
     };
     this.props.changeAccount(param, {
       SuccessCallback: res => {
-        this.setLoader(false);
+        this.callFetchUserPreference(true);
       },
       FailureCallback: res => {
         this.setLoader(false);
@@ -163,6 +213,105 @@ class SettingScreenContainer extends Component {
 
   onHelpDeskClick = () => {
     navigate('HelpDeskScreen');
+  };
+
+  changeProfile = () => {
+    setTimeout(() => {
+      this.props.clearAllData();
+      this.callFetchUserPreference(false);
+      this.setLoader(false);
+      navigateAndSimpleReset('SplashScreen');
+    }, 1200);
+  };
+
+  callSetProfileEvents = value => {
+    let payload = {
+      user_type: 'agent',
+      user_status: value ? 'online' : 'away',
+    };
+    let param = {
+      type: 'user_status',
+      payload: payload,
+    };
+    this.props.setProfileEvents(
+      this.props?.userPreference?.logged_in_user_id,
+      param,
+      {
+        SuccessCallback: res => {},
+        FailureCallback: res => {},
+      },
+    );
+    payload['user_id'] = this.props?.userPreference?.logged_in_user_id;
+    changeUserStatus(payload);
+  };
+
+  callSetUserSetting = data => {
+    const {userPreference} = this.props;
+    let param = {
+      first_name: userPreference?.first_name,
+      last_name: userPreference?.last_name,
+      language: data?.languageName,
+    };
+    this.props.changeUserSetting(param, {
+      SuccessCallback: res => {
+        navigateAndSimpleReset('SplashScreen');
+      },
+      FailureCallback: res => {
+        handleFailureCallback(res);
+      },
+    });
+  };
+
+  onSearchText = searchText => {
+    const {accounts} = this.props;
+
+    this.setState({
+      search_text: searchText,
+    });
+
+    if (!searchText || searchText === '') {
+      this.setState({
+        filterAccountData: [],
+      });
+      return;
+    }
+
+    let filterTeamData = accounts.filter(function (item) {
+      return item?.name?.toLowerCase()?.includes(searchText?.toLowerCase());
+    });
+
+    this.setState({
+      filterAccountData: filterTeamData,
+    });
+  };
+
+  onChangeLanguage = searchText => {
+    this.setState({
+      searchLanguageValue: searchText,
+    });
+
+    if (!searchText || searchText === '') {
+      this.setState({
+        filerLanguageData: [],
+      });
+      return;
+    }
+
+    let filterTeamData = languageList.filter(function (item) {
+      return item?.languageName
+        ?.toLowerCase()
+        ?.includes(searchText?.toLowerCase());
+    });
+
+    this.setState({
+      filerLanguageData: filterTeamData,
+    });
+  };
+
+  onHideLanguageModal = () => {
+    this.setState({
+      showLanguageModal: false,
+    });
   };
 
   render() {
@@ -182,8 +331,14 @@ class SettingScreenContainer extends Component {
           profilePhoto={userPreference?.image_url?.small}
           onPressAccountDropdown={this.onPressAccountDropdown}
           accountModalRef={this.accountModalRef}
-          accountList={accounts}
-          languageList={languageList}
+          accountList={
+            this.state.search_text ? this.state.filterAccountData : accounts
+          }
+          languageList={
+            this.state.searchLanguageValue
+              ? this.state.filerLanguageData
+              : languageList
+          }
           onAccountListPress={(item, index) =>
             this.onAccountListPress(item, index)
           }
@@ -199,6 +354,14 @@ class SettingScreenContainer extends Component {
           account_id={userPreference?.account_id}
           isLoading={state.isLoading}
           onHelpDeskClick={this.onHelpDeskClick}
+          showAccountModal={this.state.showAccountModal}
+          onHideModal={() => this.setState({showAccountModal: false})}
+          onChangeText={this.onSearchText}
+          searchValue={this.state.search_text}
+          showLanguageModal={this.state.showLanguageModal}
+          searchLanguageValue={this.state.searchLanguageValue}
+          onChangeLanguage={this.onChangeLanguage}
+          onHideLanguageModal={this.onHideLanguageModal}
         />
       </>
     );
@@ -210,6 +373,9 @@ const mapActionCreators = {
   fetchAccounts,
   fetchUserPreference,
   changeAccount,
+  clearAllData,
+  setProfileEvents,
+  changeUserSetting,
 };
 const mapStateToProps = state => {
   return {

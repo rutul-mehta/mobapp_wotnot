@@ -10,12 +10,15 @@ import {
   BottomSheet,
   ActionItem,
   Loader,
+  OfflineNotice,
+  FullScreenModal,
 } from '../../../components';
 import Spacing from '../../../components/Spacing';
 import {strings} from '../../../locales/i18n';
 import theme from '../../../util/theme';
 import styles from '../Style';
 import {AlertDialog, Box, Button} from 'native-base';
+import {SvgUri} from 'react-native-svg';
 
 const RenderRowItem = ({onPress, text, dropdownVale, color, dropDownClick}) => {
   return (
@@ -76,12 +79,26 @@ const SettingScreenComponent = ({
   account_id,
   isLoading,
   onHelpDeskClick,
+  showAccountModal,
+  onHideModal,
+  searchValue,
+  onChangeText,
+  showLanguageModal,
+  searchLanguageValue,
+  onChangeLanguage,
+  onHideLanguageModal,
 }) => {
   return (
     <FlexContainer statusBarColor={theme.colors.brandColor.FAFAFA}>
       <Header isLeftIconHidden={true} isRightIconHidden={true} />
       <ScrollView contentContainerStyle={styles.container}>
-        <UserItem name={name} email={email} uri={profilePhoto} isAvatar />
+        <UserItem
+          name={name}
+          email={email}
+          uri={profilePhoto}
+          isAvatar
+          isOnline={isActive}
+        />
         <Spacing size="md" />
         <View style={{flexDirection: 'row'}}>
           <Text type={'body1'} style={{flex: 1}}>
@@ -112,34 +129,95 @@ const SettingScreenComponent = ({
         </Text>
         <Spacing size="md" />
         <RenderRowItem
-          text={`${strings('settings.account')}  `}
+          text={`${strings('settings.ACCOUNT_MENU')}  `}
           dropdownVale={accountDropdownValue}
           dropDownClick={onPressAccountDropdown}
         />
         <Spacing size="md" />
         <RenderRowItem
-          text={strings('settings.language')}
+          text={strings('settings.CHANGE_LANGUAGE_LABEL')}
           dropdownVale={languageDropdownValue}
           dropDownClick={onPressLanguageDropdown}
         />
         <Spacing size="md" />
         <RenderRowItem
-          text={strings('settings.notifications')}
+          text={strings('settings.NOTIFICATION_HEADER')}
           onPress={onNotificationClick}
         />
         <Spacing size="md" />
         <RenderRowItem
-          text={strings('settings.help_desk')}
+          text={strings('settings.HELP_DESK')}
           onPress={onHelpDeskClick}
         />
         <Spacing size="md" />
         <RenderRowItem
-          text={strings('settings.logout')}
+          text={strings('settings.LOGOUT')}
           color={theme.colors.typography.error}
           onPress={onLogoutClick}
         />
       </ScrollView>
-      <BottomSheet
+      <FullScreenModal
+        listData={accountList}
+        lisItem={({item, index}) => (
+          <ActionItem
+            key={index}
+            label={item?.name}
+            onItemPress={() => onAccountListPress(item, index)}
+            leftIcon={
+              <Image
+                resizeMode="contain"
+                source={
+                  item?.image_url?.small
+                    ? {uri: item?.image_url?.small}
+                    : images.ic_userprofile
+                }
+                style={{
+                  height: theme.sizes.icons.sm * 1.5,
+                  width: theme.sizes.icons.sm * 1.5,
+                  alignSelf: 'center',
+                  borderRadius: theme.sizes.icons.sm,
+                }}
+              />
+            }
+            rightIcon={
+              item?.id === account_id ? (
+                <Image
+                  resizeMode="contain"
+                  source={images.ic_check_mark}
+                  style={{
+                    height: theme.sizes.icons.sm,
+                    width: theme.sizes.icons.sm,
+                    tintColor: theme.colors.brandColor.blue,
+                  }}
+                />
+              ) : null
+            }
+          />
+        )}
+        showModal={showAccountModal}
+        onHideModal={onHideModal}
+        placeholder={strings('SEARCH_PLACEHOLDER')}
+        onChangeText={onChangeText}
+        searchValue={searchValue}
+        noDataPlaceholder={strings('NO_DATA_FOUND')}
+      />
+      <FullScreenModal
+        listData={languageList}
+        lisItem={({item, index}) => (
+          <ActionItem
+            key={index}
+            label={item?.languageName}
+            onItemPress={() => onLanguageSelected(item, index)}
+          />
+        )}
+        showModal={showLanguageModal}
+        onHideModal={onHideLanguageModal}
+        placeholder={strings('SEARCH_PLACEHOLDER')}
+        onChangeText={onChangeLanguage}
+        searchValue={searchLanguageValue}
+        noDataPlaceholder={strings('NO_DATA_FOUND')}
+      />
+      {/* <BottomSheet
         ref={accountModalRef}
         height={theme.normalize(220)}
         closeOnDragDown
@@ -185,8 +263,8 @@ const SettingScreenComponent = ({
             />
           ))}
         </ScrollView>
-      </BottomSheet>
-      <BottomSheet
+      </BottomSheet> */}
+      {/* <BottomSheet
         ref={languageModalRef}
         height={theme.normalize(220)}
         closeOnDragDown
@@ -203,7 +281,7 @@ const SettingScreenComponent = ({
             />
           ))}
         </ScrollView>
-      </BottomSheet>
+      </BottomSheet> */}
       <AlertDialog
         leastDestructiveRef={cancelRef}
         isOpen={isOpen}

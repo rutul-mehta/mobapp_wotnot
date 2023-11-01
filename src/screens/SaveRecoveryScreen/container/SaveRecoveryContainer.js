@@ -1,7 +1,10 @@
 import React, {Component} from 'react';
 import {View, Text, Alert} from 'react-native';
 import {connect} from 'react-redux';
-import {goBack} from '../../../navigator/NavigationUtils';
+import {
+  goBack,
+  navigateAndSimpleReset,
+} from '../../../navigator/NavigationUtils';
 import SaveRecoveryComponent from '../component/SaveRecoveryComponent';
 import {
   twoFactorCode,
@@ -9,10 +12,12 @@ import {
   fetchUserPreference,
 } from '../../../store/actions';
 import {handleFailureCallback} from '../../../util/apiHelper';
-import {strings} from '../../../locales/i18n';
+import {setLocale, strings} from '../../../locales/i18n';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {showToast} from '../../../util/helper';
 import axios from 'axios';
+import {LOCAL_STORAGE} from '../../../constants/storage';
+import AsyncStorage from '@react-native-community/async-storage';
 
 class SaveRecoveryContainer extends Component {
   constructor(props) {
@@ -64,7 +69,15 @@ class SaveRecoveryContainer extends Component {
 
   onDoneClick = () => {
     this.props.fetchUserPreference(null, {
-      SuccessCallback: res => {},
+      SuccessCallback: res => {
+        AsyncStorage.setItem(
+          LOCAL_STORAGE.USER_PREFERENCE,
+          JSON.stringify(res),
+        );
+        setLocale(res?.language?.code)
+        AsyncStorage.setItem(LOCAL_STORAGE.IS_LOGIN, 'true');
+        navigateAndSimpleReset('MainNavigator');
+      },
       FailureCallback: res => {
         handleFailureCallback(res);
       },
