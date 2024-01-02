@@ -181,6 +181,12 @@ export const endPoints = {
       method: Method.GET,
     };
   },
+  calendarEvent: account_id => {
+    return {
+      endpoint: `/v1/accounts/${account_id}/calendar/events`,
+      method: Method.GET,
+    };
+  },
 };
 
 
