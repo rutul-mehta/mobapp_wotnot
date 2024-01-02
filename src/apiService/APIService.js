@@ -1,5 +1,4 @@
 import httpClient from 'axios';
-import {endPoints} from '../constants/urls';
 import {appName} from './Config';
 
 export let apiConfig = {};
@@ -73,12 +72,10 @@ class API {
   }
 
   setHeader(key, value) {
-    console.log('key', key);
     axios.defaults.headers.common[key] = value;
   }
 
   setHeaders(key) {
-    console.log('key', key);
     key?.forEach(element => {
       axios.defaults.headers.common[element?.key] = element?.value;
     });
@@ -101,12 +98,14 @@ class API {
   }
 
   Logger(message) {
+    console.log(appName, message);
     if (this._DevMode !== DevelopmentMode.PRODUCTION) {
       console.log(appName, message);
     }
   }
 
   helperLog(TAG, response) {
+    console.log(TAG, response);
     if (this._DevMode !== DevelopmentMode.PRODUCTION) {
       console.log(TAG, JSON.stringify(response));
     }
@@ -146,7 +145,7 @@ class API {
     let finalHeader = Object.assign({}, headers);
     finalHeader['app_version'] = DeviceInfoRN.getVersion();
     finalHeader['os_name'] = DeviceInfoRN.getOsName();
-    finalHeader['source'] = "react-native-app";
+    finalHeader['source'] = 'react-native-app';
 
     switch (method) {
       case Method.GET:

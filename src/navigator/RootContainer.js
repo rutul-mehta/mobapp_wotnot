@@ -11,6 +11,7 @@ import {
   View,
   PermissionsAndroid,
   Platform,
+  Linking
 } from 'react-native';
 import {
   ConversationScreen,
@@ -64,22 +65,22 @@ export default class RootContainer extends Component {
     const enabled =
       authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
       authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-    console.log('Authorization enabled:', enabled);
 
     if (enabled) {
-      console.log('---------->', 1);
       await messaging().registerDeviceForRemoteMessages();
       this.getFcmToken();
     }
   }
 
   async getFcmToken() {
-    console.log('---------->', 2);
     const fcmToken = await messaging().getToken();
     if (fcmToken) {
-      console.log('FCM Token:', fcmToken);
+      // console.log('FCM Token:', fcmToken);
+      // alert(fcmToken)
+      // Linking.openURL(`mailto:support@example.com?subject=SendMail&body=${fcmToken}`)
       AsyncStorage.setItem(LOCAL_STORAGE.NOTIFICATION_TOKEN, fcmToken);
     } else {
+      // alert(fcmToken)
       // helperLog('Failed', 'No token received');
     }
   }
@@ -92,14 +93,12 @@ export default class RootContainer extends Component {
     this.requestUserPermission();
     this.registerAppStateEvent();
     messaging().onMessage(async remoteMessage => {
-      console.log('FCM Message Data:', remoteMessage);
     });
     messaging().setBackgroundMessageHandler(async remoteMessage => {
       // Update a users messages list using AsyncStorage
       // const currentMessages = await AsyncStorage.getItem('messages');
       // const messageArray = JSON.parse(currentMessages);
       // messageArray.push(remoteMessage.data);
-      console.log('messageArray', remoteMessage);
     });
   }
 

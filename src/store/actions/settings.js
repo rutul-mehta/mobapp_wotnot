@@ -1,9 +1,10 @@
 import {API} from '../../apiService';
-import {endPoints} from '../../constants/urls';
+import {endPoints} from '../../../env';
 import {
   loadingSet,
   loadingUnset,
   setAccountList,
+  setCalendarEvent,
   setNotificationData,
   setUserSetting,
 } from './global';
@@ -189,6 +190,32 @@ export const changeUserSetting = (param,{SuccessCallback, FailureCallback}) => {
       {
         SuccessCallback: response => {
           dispatch(loadingUnset());
+          SuccessCallback(response);
+        },
+        FailureCallback: response => {
+          dispatch(loadingUnset());
+          FailureCallback(response);
+        },
+      },
+    );
+  };
+};
+
+
+export const fetchCalendarEvent = (
+  accountId,
+  {SuccessCallback, FailureCallback},
+) => {
+  return dispatch => {
+    // showLoader ? dispatch(loadingSet()) : null;
+    API.getInstance().Fetch(
+      endPoints.calendarEvent(accountId),
+      defaultHeaders,
+      '',
+      {
+        SuccessCallback: response => {
+          dispatch(loadingUnset());
+          setCalendarEvent(response);
           SuccessCallback(response);
         },
         FailureCallback: response => {

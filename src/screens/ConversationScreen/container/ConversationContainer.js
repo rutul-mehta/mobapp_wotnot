@@ -1,9 +1,13 @@
 import React, {Component} from 'react';
-import {Alert, Keyboard, AppState} from 'react-native';
+import {Alert, Keyboard, AppState, BackHandler} from 'react-native';
 import {connect} from 'react-redux';
 import {CONVERSATION} from '../../../constants/global';
 import {strings} from '../../../locales/i18n';
-import {goBack, navigate} from '../../../navigator/NavigationUtils';
+import {
+  goBack,
+  navigate,
+  navigateAndSimpleReset,
+} from '../../../navigator/NavigationUtils';
 import {handleFailureCallback} from '../../../util/apiHelper';
 import ConversationComponent from '../component/ConversationComponent';
 import RNFetchBlob from 'rn-fetch-blob';
@@ -25,6 +29,7 @@ import {
   uploadFileAttachment,
   saveReply,
   fetchSavedReplySearch,
+  fetchCalendarEvent,
 } from '../../../store/actions';
 import {
   CONVERSATION_STATUS_NAME,
@@ -52,6 +57,7 @@ import {
 } from '../../../util/MediaHelper';
 import {getChatMsgCountWithoutStatusMsg} from '../../../util/ChatHistoryHelper';
 import axios from 'axios';
+import {Text, View} from 'native-base';
 
 let options = {
   mediaType: 'photo',
@@ -96,6 +102,12 @@ class ConversationContainer extends Component {
       savedReplyList: [],
       isSearching: false,
       userData: {},
+      selectedOperatorId: null,
+      showCalendarModal: false,
+      searchEvent: '',
+      calendarEvent: [],
+      isMessageTypeEvent: false,
+      selectedCalenderEvent: null,
     };
     this.onPressInfo = this.onPressInfo.bind(this);
     this.onPressMore = this.onPressMore.bind(this);
@@ -110,20 +122,35 @@ class ConversationContainer extends Component {
     this.appStateRef = null;
     this.replyInputRef = React.createRef();
     this.timer = null;
+    this.handleBackButtonClick = this.handleBackButtonClick.bind(this);
+    this.onHideCalendarModal = this.onHideCalendarModal.bind(this);
+    this.onChangeCalendar = this.onChangeCalendar.bind(this);
+    this.onSelectedEvent = this.onSelectedEvent.bind(this);
+    this.onEventCancel = this.onEventCancel.bind(this);
   }
 
   componentDidMount = () => {
     const {
       route: {
-        params: {itemData},
+        params: {itemData, fromNotification},
       },
     } = this.props;
-    this.setState({
-      conversationJoined: true,
-      conversationStatus: itemData?.status_id ?? 1,
-      // isJoinButtonVisible:
-      //   itemData?.conversation_mode !== CONVERSATION.CONVERSATION_MODE,
-    });
+    console.log('itemData', itemData);
+    this.setState(
+      {
+        conversationJoined: true,
+        conversationStatus: itemData?.status_id ?? 1,
+        selectedOperatorId: {
+          id: itemData?.assignee && itemData?.assignee?.id,
+          index: -1,
+        },
+        // isJoinButtonVisible:
+        //   itemData?.conversation_mode !== CONVERSATION.CONVERSATION_MODE,
+      },
+      () => {
+        console.log(this.state.selectedOperatorId);
+      },
+    );
     this.registerAppStateEvent();
     this.props?.setConversationsHistory([]);
     this.callFetchTeamData();
@@ -133,17 +160,23 @@ class ConversationContainer extends Component {
     this._unsubscribe = this.props.navigation.addListener('focus', () => {
       this.registerListener();
     });
-    // this._callSaveReply()
-    // Keyboard.addListener('keyboardDidShow', this._keyboardDidShow.bind(this));
-    // Keyboard.addListener('keyboardDidHide', this._keyboardDidHide.bind(this));
+    this._callSaveReply();
+    this.callFetchCalendarEvent();
+    Keyboard.addListener('keyboardDidShow', this._keyboardDidShow.bind(this));
+    Keyboard.addListener('keyboardDidHide', this._keyboardDidHide.bind(this));
+    BackHandler.addEventListener(
+      'hardwareBackPress',
+      this.handleBackButtonClick,
+    );
   };
 
   componentWillUnmount = () => {
-    console.log(
-      '---------------->---------------->---------------->---------------->',
-    );
     this.props.saveReply([]);
     this._unsubscribe();
+    BackHandler.removeEventListener(
+      'hardwareBackPress',
+      this.handleBackButtonClick,
+    );
   };
 
   onPressMore = () => {
@@ -205,6 +238,16 @@ class ConversationContainer extends Component {
   };
 
   onPressLeftContent = () => {
+    const {
+      route: {
+        params: {itemData, fromNotification},
+      },
+      userPreference,
+    } = this.props;
+    if (fromNotification) {
+      navigateAndSimpleReset('MainNavigator');
+      return;
+    }
     goBack();
   };
 
@@ -246,6 +289,9 @@ class ConversationContainer extends Component {
   };
 
   showMenuOptions = () => {
+    if (this.state.isMessageTypeEvent) {
+      return;
+    }
     this.attachmentBottomSheetRef?.current?.open();
   };
 
@@ -261,16 +307,46 @@ class ConversationContainer extends Component {
         params: {itemData},
       },
     } = this.props;
-    let payload = {
-      conversation_key: itemData?.thread_key,
-      type: 'message',
-      payload: {
-        message: {text: this.state.messageToSend, type: 'text'},
-      },
-    };
+    let payload = '';
+    if (this.state.isMessageTypeEvent) {
+      let {selectedCalenderEvent} = this.state
+      payload = {
+        conversation_key: itemData?.thread_key,
+        type: 'appointment_booking',
+        payload: {
+          version: 2,
+          assignee: [
+            {
+              id: '74692',
+              avatar:
+                'https://wotnot-avatar.storage.googleapis.com/_thumb_74692-20230818064534438704-dwh98.png',
+            },
+          ],
+          event_id: selectedCalenderEvent?.id,
+          is_booking_confirmed: false,
+          duration: {
+            label: selectedCalenderEvent?.duration?.label,
+            value: selectedCalenderEvent?.duration?.value,
+          },
+          title: selectedCalenderEvent?.title,
+          id: 'e2d62bea-a312-41ec-a21f-02cea47e63e3',
+        },
+      };
+    } else {
+      payload = {
+        conversation_key: itemData?.thread_key,
+        type: 'message',
+        payload: {
+          message: {text: this.state.messageToSend, type: 'text'},
+        },
+      };
+    }
+    this.onChangeOperator();
     this.callSetIncomingEvent(payload);
     this.setState({
       messageToSend: '',
+      isMessageTypeEvent:false,
+      selectedCalenderEvent:null
     });
     // this.listRef.current?.scrollToEnd({animated: true});
   };
@@ -286,8 +362,13 @@ class ConversationContainer extends Component {
     this._callSaveReply();
   };
   onCalendarPress = () => {
-    Alert.alert('TBD');
     this.attachmentBottomSheetRef?.current?.close();
+    setTimeout(() => {
+      this.setState({
+        showCalendarModal: true,
+      });
+    }, 200);
+    this.callFetchCalendarEvent();
   };
   onAttachmentsPress = async () => {
     setTimeout(async () => {
@@ -590,7 +671,6 @@ class ConversationContainer extends Component {
       {
         SuccessCallback: res => {
           // let listData = this.props.save_reply_list;
-          console.log('res?.replies', res?.replies);
           this.setState({
             saveLoading: false,
             total_replies: res?.total_replies,
@@ -615,7 +695,6 @@ class ConversationContainer extends Component {
       {
         SuccessCallback: res => {
           // let listData = this.props.save_reply_list;
-          console.log('res?.replies', res?.replies);
           this.setState({
             saveLoading: false,
             total_replies: res?.total_replies,
@@ -685,18 +764,25 @@ class ConversationContainer extends Component {
   };
 
   onMessageReceived = msg => {
+    console.log("onMessageReceived--->",msg)
     const {
       route: {
         params: {itemData},
       },
     } = this.props;
-    console.log('msg------->', msg);
+    let parsedMessage = JSON.parse(msg['event_payload']['data']);
     if (!(this.props.isLoading || this.state.isLoading) && msg) {
       if (itemData?.thread_key === msg?.conversation_key) {
+        if(parsedMessage?.type === 'appointment_booking'){
+          this.callFetchConversationHistory(false, false);
+          this.callReadMessageEvent(Number(this.state.readMessageCount) + 1);
+          return
+        }
         let convertedMessage = getMessageFromEventPayload(
           msg,
           this.props.messageHistory,
         );
+        console.log("convertedMessage",JSON.stringify(convertedMessage))
         let newMsg;
         if (!convertedMessage) return;
         if (convertedMessage?.bot) {
@@ -798,7 +884,6 @@ class ConversationContainer extends Component {
   };
 
   changeConversationStatus = data => {
-    console.log('------>changeConversationStatus', data);
     const {
       route: {
         params: {itemData},
@@ -819,8 +904,14 @@ class ConversationContainer extends Component {
           //   JSON.stringify(this.state.messageList),
           // );
           setTimeout(() => {
+            this.setState({
+              messageList: [...this.state.messageList],
+            });
             this.callFetchConversationHistory(false, false);
           }, 1500);
+          setTimeout(() => {
+            this.callFetchConversationHistory(false, false);
+          }, 1900);
         },
       );
     }
@@ -843,6 +934,7 @@ class ConversationContainer extends Component {
   };
 
   assigneeChange = msgAssigneeChange => {
+    console.log('msgAssigneeChange', msgAssigneeChange);
     const {
       route: {
         params: {itemData},
@@ -857,6 +949,13 @@ class ConversationContainer extends Component {
             })
           : null;
         let assignedTo = msgAssigneeChange.event_payload.assigned.to;
+        if (msgAssigneeChange.event_payload.assigned.to.id === null) {
+          this.setState({
+            selectedOperatorId: {
+              id: null,
+            },
+          });
+        }
         (assignedTo.user_type === 'user' || assignedTo.user_type === null) &&
         this.state.isJoinButtonVisible
           ? this.setState({isJoinButtonVisible: false})
@@ -870,9 +969,14 @@ class ConversationContainer extends Component {
             },
           },
         };
-        this.setState({
-          messageList: [msgAssignee, ...this.state.messageList],
-        });
+        this.setState(
+          {
+            messageList: [msgAssignee, ...this.state.messageList],
+          },
+          () => {
+            this.callFetchConversationHistory(false, false);
+          },
+        );
       }
     }
   };
@@ -1027,6 +1131,84 @@ class ConversationContainer extends Component {
     );
   };
 
+  handleBackButtonClick() {
+    this.onPressLeftContent();
+    return true;
+  }
+
+  onChangeOperator = () => {
+    const {
+      route: {
+        params: {itemData},
+      },
+      userPreference,
+    } = this.props;
+
+    const {conversationStatus, selectedOperatorId} = this.state;
+    if (
+      conversationStatus !== CONVERSATION.CLOSED_MESSAGE_TYPE &&
+      selectedOperatorId &&
+      selectedOperatorId?.id === null
+    ) {
+      let payload = {
+        conversation_key: itemData?.thread_key,
+        type: 'assignee',
+        payload: {
+          assignee: {
+            to: {
+              id: userPreference?.account_id,
+              type: 'team_member',
+            },
+          },
+        },
+      };
+      this.callSetIncomingEvent(payload);
+    }
+  };
+
+  callFetchCalendarEvent = () => {
+    this.props.fetchCalendarEvent(this.props?.userPreference?.account_id, {
+      SuccessCallback: res => {
+        this.setState({
+          calendarEvent: res?.events,
+        });
+        console.log('callFetchCalendarEvent', res);
+      },
+      FailureCallback: res => {
+        handleFailureCallback(res, false, true, false);
+      },
+    });
+  };
+
+  onHideCalendarModal = () => {
+    this.setState({
+      showCalendarModal: false,
+    });
+  };
+
+  onChangeCalendar = text => {
+    this.setState({
+      searchEvent: text,
+    });
+  };
+
+  onSelectedEvent = (item, index) => {
+    console.log({item})
+    this.setState({
+      isMessageTypeEvent: true,
+      showCalendarModal: false,
+      selectedCalenderEvent: item,
+      messageToSend: ' ',
+    });
+  };
+
+  onEventCancel = () => {
+    this.setState({
+      isMessageTypeEvent: false,
+      selectedCalenderEvent: null,
+    });
+  };
+
   render() {
     const {
       teamMateData,
@@ -1035,8 +1217,26 @@ class ConversationContainer extends Component {
         params: {itemData},
       },
       userPreference,
+      calendarEvent,
     } = this.props;
     let {filterTeamMateData, filterTeamData, search_text} = this.state;
+    let finalTeamMate =
+      search_text !== ''
+        ? filterTeamMateData
+        : teamMateData
+        ? [
+            {
+              id: null,
+              display_name: 'none',
+            },
+            ...teamMateData,
+          ]
+        : [
+            {
+              id: null,
+              display_name: 'none',
+            },
+          ];
 
     return (
       <>
@@ -1070,17 +1270,18 @@ class ConversationContainer extends Component {
           onTeamClick={this.onTeamClick}
           onTeamMateClick={this.onTeamMateClick}
           isTeamSelected={this.state.isTeamSelected}
-          teamMateData={
-            search_text !== ''
-              ? filterTeamMateData
-              : [
-                  {
-                    id: null,
-                    display_name: 'none',
-                  },
-                  ...teamMateData,
-                ]
-          }
+          teamMateData={finalTeamMate}
+          // teamMateData={
+          //   search_text !== ''
+          //     ? filterTeamMateData
+          //     : [
+          //         // {
+          //         //   id: null,
+          //         //   display_name: 'none',
+          //         // },
+          //         ...teamMateData,
+          //       ]
+          // }
           teamData={search_text !== '' ? filterTeamData : teamData}
           itemData={itemData}
           userID={userPreference?.logged_in_user_id}
@@ -1109,6 +1310,15 @@ class ConversationContainer extends Component {
           replyInputRef={this.replyInputRef}
           handleLoadMore1={this.loadSaveReply}
           saveReplyLoadMore={this.state.saveReplyLoadMore}
+          showCalendarModal={this.state.showCalendarModal}
+          onHideCalendarModal={this.onHideCalendarModal}
+          onChangeCalendar={this.onChangeCalendar}
+          searchCalendarEventValue={this.state.searchEvent}
+          calenderEventList={this.state.calendarEvent}
+          onSelectedEvent={this.onSelectedEvent}
+          isMessageTypeEvent={this.state.isMessageTypeEvent}
+          onEventCancel={this.onEventCancel}
+          selectedCalenderEvent={this.state.selectedCalenderEvent}
         />
       </>
     );
@@ -1126,17 +1336,19 @@ const mapActionCreators = {
   uploadFileAttachment,
   saveReply,
   fetchSavedReplySearch,
+  fetchCalendarEvent,
 };
 const mapStateToProps = state => {
   return {
-    teamData: state.accountReducer?.teamData?.teams,
-    teamMateData: state.accountReducer?.teamMateData?.users,
-    userPreference: state.detail?.userPreference,
+    teamData: state?.accountReducer?.teamData?.teams,
+    teamMateData: state?.accountReducer?.teamMateData?.users,
+    userPreference: state?.detail?.userPreference,
     messageHistory:
-      state.conversationReducer?.conversationHistory?.messages_list,
-    isLoading: state.global.loading,
-    conversationHistory: state.conversationReducer?.conversationHistory,
-    save_reply_list: state.accountReducer?.savedReply,
+      state?.conversationReducer?.conversationHistory?.messages_list,
+    isLoading: state?.global.loading,
+    conversationHistory: state?.conversationReducer?.conversationHistory,
+    save_reply_list: state?.accountReducer?.savedReply,
+    calendarEvent: state?.settings?.calendarEvent?.events,
   };
 };
 export default connect(
